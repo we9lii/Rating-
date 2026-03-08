@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { getReports } from '../utils/storage';
-import { getCurrentWeekId, getPreviousWeekId, formatShortDate } from '../utils/date';
+import { getCurrentWeekId, getPreviousWeekId, formatShortDate, getRecentWeeks } from '../utils/date';
 import { WeeklyReport } from '../types';
-import { CheckCircle, Clock, TrendingUp, AlertCircle, Calendar, FileText } from 'lucide-react';
+import { CheckCircle, Clock, TrendingUp, AlertCircle, Calendar, FileText, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -52,7 +52,7 @@ export function Dashboard() {
           <h1 className="text-2xl font-bold text-slate-900">مرحباً {user.name.split(' ')[0]} 👋</h1>
           <p className="text-slate-500 mt-1">إليك ملخص أداءك الأسبوعي</p>
         </div>
-        
+
         {!isCurrentSubmitted ? (
           <Link to="/report">
             <Button className="gap-2 shadow-md shadow-indigo-200">
@@ -67,6 +67,74 @@ export function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Weekly Calendar Timeline */}
+      <Card className="border-indigo-100 shadow-sm overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-2 h-full bg-indigo-500"></div>
+        <CardHeader className="bg-slate-50 border-b border-slate-100 pb-4">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-indigo-500" />
+            تقويم المتابعة الأسبوعية
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar snap-x">
+            {getRecentWeeks(5).map((week) => {
+              const weekReport = reports.find(r => r.weekId === week.id);
+              const isSubmitted = weekReport?.isSubmitted;
+              const isDraft = weekReport && !isSubmitted;
+              const isPast = week.id < currentWeekId;
+
+              let statusText = 'قيد الانتظار';
+              let statusColor = 'text-slate-500';
+              let bgColor = 'bg-slate-50';
+              let borderColor = 'border-slate-200';
+              let Icon = Clock;
+
+              if (isSubmitted) {
+                statusText = 'تم التسليم';
+                statusColor = 'text-emerald-700';
+                bgColor = 'bg-emerald-50';
+                borderColor = 'border-emerald-200';
+                Icon = CheckCircle;
+              } else if (isDraft) {
+                statusText = 'مسودة (قيد الإعداد)';
+                statusColor = 'text-amber-700';
+                bgColor = 'bg-amber-50';
+                borderColor = 'border-amber-200';
+                Icon = FileText;
+              } else if (isPast && !isSubmitted) {
+                statusText = 'متأخر (لم يسلم)';
+                statusColor = 'text-red-700';
+                bgColor = 'bg-red-50';
+                borderColor = 'border-red-200';
+                Icon = AlertCircle;
+              } else if (week.isCurrent) {
+                statusText = 'الأسبوع الحالي';
+                statusColor = 'text-indigo-700';
+                bgColor = 'bg-indigo-50';
+                borderColor = 'border-indigo-200';
+                Icon = Clock;
+              }
+
+              return (
+                <div key={week.id} className={`snap-center shrink-0 w-48 rounded-2xl border ${borderColor} p-4 flex flex-col items-center justify-center text-center gap-2 transition-all hover:shadow-md ${week.isCurrent ? 'ring-2 ring-indigo-500 ring-offset-2' : ''} ${bgColor}`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-white shadow-sm text-${statusColor.split('-')[1]}-600`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-800">أسبوع {week.id.split('-W')[1]}</h4>
+                    <p className="text-xs text-slate-500 mt-1">{formatShortDate(week.start)} - {formatShortDate(week.end)}</p>
+                  </div>
+                  <span className={`text-xs font-bold px-2 py-1 rounded-full bg-white/60 ${statusColor}`}>
+                    {statusText}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -125,8 +193,8 @@ export function Dashboard() {
               </div>
             </div>
             <div className="mt-4 text-sm text-slate-500">
-              {isCurrentSubmitted 
-                ? `${currentWeekReport?.currentWeekTasks.length || 0} مهام مخططة` 
+              {isCurrentSubmitted
+                ? `${currentWeekReport?.currentWeekTasks.length || 0} مهام مخططة`
                 : 'يرجى تعبئة التقرير قبل نهاية الأسبوع'}
             </div>
           </CardContent>
@@ -146,7 +214,7 @@ export function Dashboard() {
                   <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                    <Tooltip 
+                    <Tooltip
                       cursor={{ fill: '#f1f5f9' }}
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                     />
@@ -160,7 +228,7 @@ export function Dashboard() {
               </div>
             ) : (
               <div className="h-72 flex flex-col items-center justify-center text-slate-400">
-                <BarChart className="w-12 h-12 mb-2 opacity-20" />
+                <BarChart3 className="w-12 h-12 mb-2 opacity-20" />
                 <p>لا توجد بيانات كافية لعرض الرسم البياني</p>
               </div>
             )}

@@ -3,6 +3,7 @@ import {
   endOfWeek,
   format,
   subWeeks,
+  addWeeks,
   getISOWeek,
   getISOWeekYear,
   parseISO,
@@ -40,4 +41,42 @@ export function formatDate(isoString: string): string {
 export function formatShortDate(isoString: string): string {
   if (!isoString) return '';
   return format(parseISO(isoString), 'dd MMM', { locale: ar });
+}
+
+export function getNextWeekId(date: Date = new Date()): string {
+  const nextWeekDate = addWeeks(date, 1);
+  return getCurrentWeekId(nextWeekDate);
+}
+
+export function getNextWeekDateRange(date: Date = new Date()): { start: string; end: string } {
+  const nextWeekDate = addWeeks(date, 1);
+  return getWeekDateRange(nextWeekDate);
+}
+
+export interface WeekInfo {
+  id: string;
+  start: string;
+  end: string;
+  isCurrent: boolean;
+}
+
+export function getRecentWeeks(count: number = 5): WeekInfo[] {
+  const weeks: WeekInfo[] = [];
+  const now = new Date();
+  const currentWeekId = getCurrentWeekId(now);
+
+  // Start from the current week and go backwards
+  for (let i = count - 1; i >= 0; i--) {
+    const d = subWeeks(now, i);
+    const id = getCurrentWeekId(d);
+    const range = getWeekDateRange(d);
+    weeks.push({
+      id,
+      start: range.start,
+      end: range.end,
+      isCurrent: id === currentWeekId,
+    });
+  }
+
+  return weeks;
 }

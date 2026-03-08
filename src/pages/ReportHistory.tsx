@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { getReports } from '../utils/storage';
 import { formatShortDate, formatDate } from '../utils/date';
 import { WeeklyReport } from '../types';
-import { Calendar, CheckCircle, XCircle, BarChart2, FileText } from 'lucide-react';
+import { Calendar, CheckCircle, XCircle, BarChart2, FileText, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { exportWeeklyReport } from '../utils/exportReport';
 
 export function ReportHistory() {
   const { user } = useAuth();
@@ -58,7 +59,15 @@ export function ReportHistory() {
                     </p>
                   </div>
                 </div>
-                
+                <button
+                  onClick={(e) => { e.stopPropagation(); exportWeeklyReport(report); }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors text-sm font-medium flex-shrink-0 cursor-pointer"
+                  title="تصدير التقرير كملف Excel"
+                >
+                  <Download className="w-4 h-4" />
+                  تصدير Excel
+                </button>
+
                 <div className="flex gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
                   <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex-shrink-0">
                     <p className="text-xs text-slate-500 mb-1">مؤشر الأداء</p>
@@ -74,7 +83,7 @@ export function ReportHistory() {
                   </div>
                 </div>
               </div>
-              
+
               <CardContent className="p-0">
                 <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-slate-100">
                   {/* Previous Tasks Evaluation */}
@@ -117,7 +126,7 @@ export function ReportHistory() {
                       <p className="text-sm text-slate-500 italic">لا توجد مهام مقيمة لهذا الأسبوع.</p>
                     )}
                   </div>
-                  
+
                   {/* Current Tasks Plan */}
                   <div className="p-6 bg-slate-50/50">
                     <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2">

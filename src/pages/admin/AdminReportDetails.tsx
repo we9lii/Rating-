@@ -3,9 +3,10 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { getAllReports } from '../../utils/storage';
+import { exportWeeklyReport } from '../../utils/exportReport';
 import { formatDate } from '../../utils/date';
 import { WeeklyReport } from '../../types';
-import { ArrowRight, Calendar, CheckCircle, XCircle, BarChart2, User, Target, Clock } from 'lucide-react';
+import { ArrowRight, Calendar, CheckCircle, XCircle, BarChart2, User, Target, Clock, Download } from 'lucide-react';
 
 export function AdminReportDetails() {
   const { id } = useParams<{ id: string }>();
@@ -44,6 +45,13 @@ export function AdminReportDetails() {
             أسبوع {report.weekId.split('-W')[1]} ({formatDate(report.weekStartDate)} - {formatDate(report.weekEndDate)})
           </p>
         </div>
+        <button
+          onClick={() => exportWeeklyReport(report)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors text-sm font-medium mr-auto cursor-pointer"
+        >
+          <Download className="w-4 h-4" />
+          تصدير Excel
+        </button>
       </div>
 
       {/* Employee Info & High-level Metrics */}
@@ -57,7 +65,7 @@ export function AdminReportDetails() {
               <h2 className="text-xl font-bold mb-1">{report.employeeName}</h2>
               <p className="text-indigo-200 text-sm">مقدم التقرير</p>
             </div>
-            
+
             <div className="mt-8 pt-6 border-t border-white/20">
               <p className="text-sm text-indigo-200 mb-1 flex items-center gap-2">
                 <Clock className="w-4 h-4" />
@@ -78,7 +86,7 @@ export function AdminReportDetails() {
               <h3 className="text-3xl font-bold text-slate-800">{report.metrics?.performanceIndicator}%</h3>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-white border-slate-200 shadow-sm flex flex-col justify-center">
             <CardContent className="p-6 text-center">
               <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
@@ -141,20 +149,19 @@ export function AdminReportDetails() {
                             أهمية: {task.importance}/10
                           </span>
                         </div>
-                        
+
                         {task.description && (
                           <p className="text-sm text-slate-500 mb-3">{task.description}</p>
                         )}
-                        
+
                         <div className="mt-3 flex flex-wrap gap-2">
-                          <span className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
-                            task.status === 'completed' 
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                              : 'bg-red-50 text-red-700 border-red-200'
-                          }`}>
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-md border ${task.status === 'completed'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-red-50 text-red-700 border-red-200'
+                            }`}>
                             {task.status === 'completed' ? 'تم التنفيذ' : 'لم يتم التنفيذ'}
                           </span>
-                          
+
                           <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
                             التقييم: {task.evaluationScore}/10
                           </span>
@@ -199,15 +206,14 @@ export function AdminReportDetails() {
                       <div className="flex-1">
                         <div className="flex justify-between items-start mb-1">
                           <h4 className="font-bold text-slate-800 text-base">{task.name}</h4>
-                          <span className={`text-xs font-medium px-2 py-1 rounded-md whitespace-nowrap ${
-                            task.importance >= 8 ? 'bg-red-50 text-red-700' :
+                          <span className={`text-xs font-medium px-2 py-1 rounded-md whitespace-nowrap ${task.importance >= 8 ? 'bg-red-50 text-red-700' :
                             task.importance >= 5 ? 'bg-amber-50 text-amber-700' :
-                            'bg-emerald-50 text-emerald-700'
-                          }`}>
+                              'bg-emerald-50 text-emerald-700'
+                            }`}>
                             أهمية: {task.importance}/10
                           </span>
                         </div>
-                        
+
                         {task.description ? (
                           <p className="text-sm text-slate-500 mt-1">{task.description}</p>
                         ) : (

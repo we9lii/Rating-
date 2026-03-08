@@ -7,17 +7,19 @@ import { Input, Textarea } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Task, TaskStatus, WeeklyReport } from '../types';
 import { getCurrentWeekId, getPreviousWeekId, getWeekDateRange, formatDate } from '../utils/date';
+import { addWeeks } from 'date-fns';
 import { getReportByWeekId, getPreviousReport, saveReport } from '../utils/storage';
 import { calculateMetrics } from '../utils/metrics';
-import { Plus, Trash2, CheckCircle, AlertCircle, ArrowRight, Save } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, AlertCircle, ArrowRight, Save, History } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export function ReportForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const currentWeekId = getCurrentWeekId();
-  const prevWeekId = getPreviousWeekId();
-  const { start, end } = getWeekDateRange();
+  const [referenceDate, setReferenceDate] = useState(new Date());
+  const currentWeekId = getCurrentWeekId(referenceDate);
+  const prevWeekId = getPreviousWeekId(referenceDate);
+  const { start, end } = getWeekDateRange(referenceDate);
 
   const [report, setReport] = useState<WeeklyReport>({
     id: uuidv4(),
@@ -33,22 +35,27 @@ export function ReportForm() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  const [viewMode, setViewMode] = useState<'drafting' | 'review'>('drafting');
 
   useEffect(() => {
     // Check if current week report already exists
     const existingReport = getReportByWeekId(user.id, currentWeekId);
-    
+
     if (existingReport) {
       if (existingReport.isSubmitted) {
-        navigate('/history'); // Redirect if already submitted
+        setAlreadySubmitted(true);
+        setIsLoading(false);
         return;
       }
+      setAlreadySubmitted(false);
       setReport({
         ...existingReport,
         previousWeekTasks: existingReport.previousWeekTasks || [],
         currentWeekTasks: existingReport.currentWeekTasks || []
       });
     } else {
+      setAlreadySubmitted(false);
       // Initialize new report with previous week's tasks
       const prevReport = getPreviousReport(user.id, currentWeekId);
       if (prevReport && prevReport.currentWeekTasks && prevReport.currentWeekTasks.length > 0) {
@@ -59,15 +66,42 @@ export function ReportForm() {
           evaluationScore: undefined,
           reasonNotCompleted: undefined,
         }));
-        
+
         setReport(prev => ({
           ...prev,
+          id: uuidv4(),
+          employeeId: user.id,
+          employeeName: user.name,
+          weekId: currentWeekId,
+          weekStartDate: start,
+          weekEndDate: end,
           previousWeekTasks: tasksToEvaluate,
+          currentWeekTasks: [],
+          isSubmitted: false
         }));
+      } else {
+        setReport({
+          id: uuidv4(),
+          employeeId: user.id,
+          employeeName: user.name,
+          weekId: currentWeekId,
+          weekStartDate: start,
+          weekEndDate: end,
+          previousWeekTasks: [],
+          currentWeekTasks: [],
+          isSubmitted: false,
+        });
       }
     }
     setIsLoading(false);
   }, [currentWeekId, navigate, user.id]);
+
+  // Auto-save draft whenever the report state changes (debounced by React batching)
+  useEffect(() => {
+    if (!isLoading && !alreadySubmitted && !report.isSubmitted) {
+      saveReport(report);
+    }
+  }, [report, isLoading, alreadySubmitted]);
 
   // Handlers for Previous Week Tasks Evaluation
   const handleAddPrevTask = () => {
@@ -95,7 +129,7 @@ export function ReportForm() {
   const handlePrevTaskNameChange = (taskId: string, name: string) => {
     setReport(prev => ({
       ...prev,
-      previousWeekTasks: (prev.previousWeekTasks || []).map(t => 
+      previousWeekTasks: (prev.previousWeekTasks || []).map(t =>
         t.id === taskId ? { ...t, name } : t
       )
     }));
@@ -104,7 +138,7 @@ export function ReportForm() {
   const handlePrevTaskStatusChange = (taskId: string, status: TaskStatus) => {
     setReport(prev => ({
       ...prev,
-      previousWeekTasks: (prev.previousWeekTasks || []).map(t => 
+      previousWeekTasks: (prev.previousWeekTasks || []).map(t =>
         t.id === taskId ? { ...t, status, reasonNotCompleted: status === 'completed' ? undefined : t.reasonNotCompleted } : t
       )
     }));
@@ -113,7 +147,7 @@ export function ReportForm() {
   const handlePrevTaskScoreChange = (taskId: string, score: number) => {
     setReport(prev => ({
       ...prev,
-      previousWeekTasks: (prev.previousWeekTasks || []).map(t => 
+      previousWeekTasks: (prev.previousWeekTasks || []).map(t =>
         t.id === taskId ? { ...t, evaluationScore: score } : t
       )
     }));
@@ -122,7 +156,7 @@ export function ReportForm() {
   const handlePrevTaskReasonChange = (taskId: string, reason: string) => {
     setReport(prev => ({
       ...prev,
-      previousWeekTasks: (prev.previousWeekTasks || []).map(t => 
+      previousWeekTasks: (prev.previousWeekTasks || []).map(t =>
         t.id === taskId ? { ...t, reasonNotCompleted: reason } : t
       )
     }));
@@ -152,8 +186,17 @@ export function ReportForm() {
   const handleCurrentTaskChange = (taskId: string, field: keyof Task, value: any) => {
     setReport(prev => ({
       ...prev,
-      currentWeekTasks: (prev.currentWeekTasks || []).map(t => 
+      currentWeekTasks: (prev.currentWeekTasks || []).map(t =>
         t.id === taskId ? { ...t, [field]: value } : t
+      )
+    }));
+  };
+
+  const handleToggleCurrentTaskStatus = (taskId: string) => {
+    setReport(prev => ({
+      ...prev,
+      currentWeekTasks: (prev.currentWeekTasks || []).map(t =>
+        t.id === taskId ? { ...t, status: t.status === 'completed' ? 'pending' : 'completed' } : t
       )
     }));
   };
@@ -164,9 +207,9 @@ export function ReportForm() {
 
     // 1. All previous tasks must be evaluated
     const prevTasks = report.previousWeekTasks || [];
-    const unEvaluatedPrevTasks = prevTasks.filter(t => 
-      t.status === 'pending' || 
-      t.evaluationScore === undefined || 
+    const unEvaluatedPrevTasks = prevTasks.filter(t =>
+      t.status === 'pending' ||
+      t.evaluationScore === undefined ||
       (t.status === 'not_completed' && (!t.reasonNotCompleted || t.reasonNotCompleted.trim() === ''))
     );
 
@@ -199,11 +242,18 @@ export function ReportForm() {
     return true;
   };
 
+  const handleReviewClick = () => {
+    if (validateForm()) {
+      setViewMode('review');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   const handleSubmit = () => {
     if (!validateForm()) return;
 
     const metrics = calculateMetrics(report.previousWeekTasks);
-    
+
     const finalReport: WeeklyReport = {
       ...report,
       isSubmitted: true,
@@ -222,24 +272,76 @@ export function ReportForm() {
 
   if (isLoading) return <div className="p-8 text-center">جاري التحميل...</div>;
 
+  if (alreadySubmitted) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center max-w-lg mx-auto fade-in">
+        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6">
+          <CheckCircle className="w-10 h-10" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-800 mb-3">يعطيك العافية!</h2>
+        <p className="text-slate-600 mb-8 whitespace-pre-line leading-relaxed">
+          لقد قمت بتسليم تقرير هذا الأسبوع مسبقاً بنجاح.
+          لا يمكنك تعديل أو إضافة تقرير جديد لنفس الأسبوع، شكراً لالتزامك.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+          <Button
+            onClick={() => setReferenceDate(addWeeks(new Date(), 1))}
+            className="gap-2 px-8 py-3 bg-emerald-600 hover:bg-emerald-700"
+          >
+            <Plus className="w-5 h-5" />
+            البدء بمسودة الأسبوع القادم
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate('/history')}
+            className="gap-2 px-8 py-3"
+          >
+            الانتقال إلى الأرشيف
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-8 pb-20 fade-in">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 pb-6 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">تقرير الأسبوع الحالي</h1>
-          <p className="text-slate-500 mt-1">
-            {formatDate(start)} - {formatDate(end)}
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+            {viewMode === 'drafting' ? 'مساحة عمل الأسبوع' : 'المراجعة النهائية والاعتماد'}
+            {viewMode === 'drafting' && (
+              <span className="bg-amber-100 text-amber-700 text-sm px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1">
+                <Save className="w-4 h-4" />
+                تُحفظ كمسودة تلقائياً
+              </span>
+            )}
+          </h1>
+          <p className="text-slate-500 mt-2 flex items-center gap-2">
+            الأسبوع {report.weekId.split('-W')[1]} ({formatDate(start)} - {formatDate(end)})
           </p>
         </div>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={handleSaveDraft} className="gap-2">
-            <Save className="w-4 h-4" />
-            حفظ كمسودة
-          </Button>
-          <Button onClick={handleSubmit} className="gap-2">
-            <CheckCircle className="w-4 h-4" />
-            إرسال التقرير
-          </Button>
+        <div className="flex gap-3 w-full md:w-auto">
+          {viewMode === 'drafting' ? (
+            <>
+              <Button variant="outline" onClick={() => navigate('/')} className="flex-1 md:flex-none">
+                العودة للرئيسية
+              </Button>
+              <Button onClick={handleReviewClick} className="gap-2 shadow-md shadow-indigo-200 bg-indigo-600 hover:bg-indigo-700">
+                <ArrowRight className="w-4 h-4" />
+                مراجعة التقرير للاعتماد
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => setViewMode('drafting')} className="flex-1 md:flex-none">
+                العودة للمسودة
+              </Button>
+              <Button onClick={handleSubmit} className="gap-2 shadow-md shadow-emerald-200 bg-emerald-600 hover:bg-emerald-700">
+                <CheckCircle className="w-4 h-4" />
+                اعتماد وإرسال للإدارة
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -251,7 +353,7 @@ export function ReportForm() {
       )}
 
       {/* Section 1: Evaluate Previous Week */}
-      <Card className="border-indigo-100 shadow-sm">
+      <Card className={`border-indigo-100 shadow-sm transition-all duration-300 ${viewMode === 'review' ? 'opacity-80' : ''}`}>
         <CardHeader className="bg-indigo-50/50 border-indigo-100">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -287,7 +389,7 @@ export function ReportForm() {
                         )}
                         <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-md">أهمية: {task.importance}/10</span>
                         {task.isUnplanned && (
-                          <button 
+                          <button
                             onClick={() => handleRemovePrevTask(task.id)}
                             className="text-red-500 hover:text-red-700 p-1 rounded-md hover:bg-red-50 transition-colors mr-auto"
                             title="حذف المهمة"
@@ -298,19 +400,19 @@ export function ReportForm() {
                       </div>
                       {task.isUnplanned ? (
                         <div className="space-y-3 mt-2">
-                          <Input 
+                          <Input
                             placeholder="اسم المهمة المنجزة..."
                             value={task.name}
                             onChange={(e) => handlePrevTaskNameChange(task.id, e.target.value)}
                             className="font-bold text-slate-800"
                           />
-                          <Input 
+                          <Input
                             placeholder="وصف مختصر (اختياري)..."
                             value={task.description || ''}
                             onChange={(e) => {
                               setReport(prev => ({
                                 ...prev,
-                                previousWeekTasks: prev.previousWeekTasks.map(t => 
+                                previousWeekTasks: prev.previousWeekTasks.map(t =>
                                   t.id === task.id ? { ...t, description: e.target.value } : t
                                 )
                               }));
@@ -324,12 +426,12 @@ export function ReportForm() {
                         </>
                       )}
                     </div>
-                    
+
                     <div className="flex-1 space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <div className="grid grid-cols-2 gap-4">
-                        <Select 
-                          label="حالة التنفيذ" 
-                          value={task.status} 
+                        <Select
+                          label="حالة التنفيذ"
+                          value={task.status}
                           onChange={(e) => handlePrevTaskStatusChange(task.id, e.target.value as TaskStatus)}
                           className={task.status === 'completed' ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : task.status === 'not_completed' ? 'border-red-300 bg-red-50 text-red-800' : ''}
                         >
@@ -337,10 +439,10 @@ export function ReportForm() {
                           <option value="completed">تم التنفيذ</option>
                           <option value="not_completed">لم يتم التنفيذ</option>
                         </Select>
-                        
-                        <Select 
-                          label="درجة التقييم (0-10)" 
-                          value={task.evaluationScore ?? ''} 
+
+                        <Select
+                          label="درجة التقييم (0-10)"
+                          value={task.evaluationScore ?? ''}
                           onChange={(e) => handlePrevTaskScoreChange(task.id, Number(e.target.value))}
                         >
                           <option value="" disabled>اختر التقييم...</option>
@@ -349,10 +451,10 @@ export function ReportForm() {
                           ))}
                         </Select>
                       </div>
-                      
+
                       {task.status === 'not_completed' && (
-                        <Textarea 
-                          label="سبب عدم الإنجاز (إلزامي)" 
+                        <Textarea
+                          label="سبب عدم الإنجاز (إلزامي)"
                           placeholder="يرجى توضيح سبب عدم إنجاز المهمة..."
                           value={task.reasonNotCompleted || ''}
                           onChange={(e) => handlePrevTaskReasonChange(task.id, e.target.value)}
@@ -368,13 +470,13 @@ export function ReportForm() {
         </CardContent>
       </Card>
 
-      {/* Section 2: Plan Current Week */}
-      <Card className="border-emerald-100 shadow-sm">
+      {/* Section 2: Plan & Execute Current Week */}
+      <Card className={`border-emerald-100 shadow-sm transition-all duration-300 ${viewMode === 'review' ? 'opacity-80' : ''}`}>
         <CardHeader className="bg-emerald-50/50 border-emerald-100">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">2</div>
-              <CardTitle className="text-emerald-900">خطة الأسبوع الحالي</CardTitle>
+              <CardTitle className="text-emerald-900">مساحة عمل الأسبوع الحالي (تُحفظ تلقائياً)</CardTitle>
             </div>
             <Button size="sm" onClick={handleAddCurrentTask} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1">
               <Plus className="w-4 h-4" />
@@ -398,41 +500,54 @@ export function ReportForm() {
             <div className="space-y-4">
               {report.currentWeekTasks.map((task, index) => (
                 <div key={task.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm relative group">
-                  <button 
+                  <button
                     onClick={() => handleRemoveCurrentTask(task.id)}
                     className="absolute top-4 left-4 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                     title="حذف المهمة"
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>
-                  
-                  <div className="flex items-center gap-2 mb-4">
+
+                  <div className="flex items-center gap-3 mb-4">
+                    <button
+                      onClick={() => handleToggleCurrentTaskStatus(task.id)}
+                      className={`w-6 h-6 rounded-full flex items-center justify-center border transition-colors ${task.status === 'completed'
+                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                        : 'border-slate-300 text-transparent hover:border-emerald-400'
+                        }`}
+                      title={task.status === 'completed' ? 'تحديد كغير منجزة' : 'تحديد كمنجزة'}
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                    </button>
                     <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md">مهمة {index + 1}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${task.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {task.status === 'completed' ? 'تم الإنجاز (مسودة)' : 'قيد التنفيذ'}
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                     <div className="md:col-span-8">
-                      <Input 
-                        label="اسم المهمة" 
+                      <Input
+                        label="اسم المهمة"
                         placeholder="ما الذي تخطط لإنجازه؟"
                         value={task.name}
                         onChange={(e) => handleCurrentTaskChange(task.id, 'name', e.target.value)}
                       />
                     </div>
                     <div className="md:col-span-4">
-                      <Select 
-                        label="درجة الأهمية (1-10)" 
+                      <Select
+                        label="درجة الأهمية (1-10)"
                         value={task.importance}
                         onChange={(e) => handleCurrentTaskChange(task.id, 'importance', Number(e.target.value))}
                       >
                         {[...Array(10)].map((_, i) => (
-                          <option key={i+1} value={i+1}>{i+1} - {i+1 === 10 ? 'أهمية قصوى' : i+1 === 1 ? 'أهمية منخفضة' : ''}</option>
+                          <option key={i + 1} value={i + 1}>{i + 1} - {i + 1 === 10 ? 'أهمية قصوى' : i + 1 === 1 ? 'أهمية منخفضة' : ''}</option>
                         ))}
                       </Select>
                     </div>
                     <div className="md:col-span-12">
-                      <Input 
-                        label="وصف مختصر (اختياري)" 
+                      <Input
+                        label="وصف مختصر (اختياري)"
                         placeholder="تفاصيل إضافية حول المهمة..."
                         value={task.description || ''}
                         onChange={(e) => handleCurrentTaskChange(task.id, 'description', e.target.value)}
@@ -441,10 +556,10 @@ export function ReportForm() {
                   </div>
                 </div>
               ))}
-              
-              <Button 
-                variant="outline" 
-                onClick={handleAddCurrentTask} 
+
+              <Button
+                variant="outline"
+                onClick={handleAddCurrentTask}
                 className="w-full py-6 border-dashed border-2 hover:border-emerald-400 hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 transition-all"
               >
                 <Plus className="w-5 h-5 mr-2" />
@@ -454,13 +569,31 @@ export function ReportForm() {
           )}
         </CardContent>
       </Card>
-      
-      <div className="flex justify-end pt-4">
-        <Button size="lg" onClick={handleSubmit} className="gap-2 px-8 shadow-lg shadow-indigo-200">
-          <CheckCircle className="w-5 h-5" />
-          اعتماد وإرسال التقرير
-        </Button>
-      </div>
+
+      {viewMode === 'review' && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-50 transform transition-all duration-500 ease-out slide-up">
+          <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800">هل أنت متأكد من الاعتماد النهائي؟</h3>
+                <p className="text-sm text-slate-500">لا يمكن تعديل التقرير بعد الإرسال للإدارة.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 w-full sm:w-auto">
+              <Button variant="outline" onClick={() => setViewMode('drafting')} className="flex-1 sm:flex-none">
+                تعديل المسودة
+              </Button>
+              <Button size="lg" onClick={handleSubmit} className="gap-2 px-8 bg-emerald-600 hover:bg-emerald-700 flex-1 sm:flex-none">
+                <CheckCircle className="w-5 h-5" />
+                نعم، اعتمد التقرير
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

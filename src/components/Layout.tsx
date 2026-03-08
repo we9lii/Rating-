@@ -16,8 +16,7 @@ export function Layout() {
   ];
 
   const adminNavItems = [
-    { name: 'لوحة الإدارة', path: '/', icon: LayoutDashboard },
-    { name: 'تقارير الموظفين', path: '/admin/reports', icon: Users },
+    { name: 'صندوق الوارد', path: '/', icon: LayoutDashboard },
   ];
 
   const navItems = user.role === 'admin' ? adminNavItems : employeeNavItems;
@@ -45,7 +44,7 @@ export function Layout() {
                 to={item.path}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all whitespace-nowrap",
-                  isActive 
+                  isActive
                     ? (user.role === 'admin' ? "bg-slate-100 text-slate-900" : "bg-indigo-50 text-indigo-700")
                     : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 )}
@@ -67,12 +66,12 @@ export function Layout() {
               <p className="text-xs text-slate-500">{user.role === 'admin' ? 'مدير النظام' : 'موظف'}</p>
             </div>
           </div>
-          
+
           {/* Role Switcher for Demo Purposes */}
           <div className="mt-4 pt-4 border-t border-slate-200/60">
             <p className="text-xs text-slate-400 mb-2 px-1 font-medium">تبديل الحساب (للتجربة)</p>
-            <Select 
-              value={user.id} 
+            <Select
+              value={user.id}
               onChange={(e) => switchUser(e.target.value)}
               className="h-8 text-xs bg-white"
             >

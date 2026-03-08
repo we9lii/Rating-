@@ -5,7 +5,6 @@ import { Dashboard } from './pages/Dashboard';
 import { ReportForm } from './pages/ReportForm';
 import { ReportHistory } from './pages/ReportHistory';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
-import { AdminReports } from './pages/admin/AdminReports';
 import { AdminReportDetails } from './pages/admin/AdminReportDetails';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -18,7 +17,6 @@ function AppRoutes() {
         {user.role === 'admin' ? (
           <>
             <Route index element={<AdminDashboard />} />
-            <Route path="admin/reports" element={<AdminReports />} />
             <Route path="admin/reports/:id" element={<AdminReportDetails />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </>

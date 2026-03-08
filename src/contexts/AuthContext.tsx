@@ -8,8 +8,8 @@ interface AuthContextType {
 }
 
 const MOCK_USERS: User[] = [
-  { id: 'emp-1', name: 'أحمد محمد', role: 'employee' },
-  { id: 'emp-2', name: 'سارة خالد', role: 'employee' },
+  { id: 'emp-1', name: 'فيصل النتيفي', role: 'employee' },
+  { id: 'emp-2', name: 'موظف 2', role: 'employee' },
   { id: 'admin-1', name: 'مدير النظام', role: 'admin' },
 ];
 
